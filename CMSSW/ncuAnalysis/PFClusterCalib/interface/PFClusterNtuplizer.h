@@ -63,6 +63,7 @@ class PFClusterNtuplizer : public edm::EDAnalyzer {
    float mPfEta;
    float mPfPhi;
    float mPfE;
+   float mPfEcorr;  // with old correction applied
 
    // EcalClusterLazyTools
    float mPfE1x3;

@@ -45,10 +45,11 @@ PFClusterNtuplizer::PFClusterNtuplizer(const edm::ParameterSet& cfg)
    mTree->Branch("pfSize5x5_ZS",   &mPfSize5x5_ZS);
    mTree->Branch("pfSize5x5_noZS", &mPfSize5x5_noZS);
 
-   mTree->Branch("pfPt",   &mPfPt);
-   mTree->Branch("pfEta",  &mPfEta);
-   mTree->Branch("pfPhi",  &mPfPhi);
-   mTree->Branch("pfE",    &mPfE);
+   mTree->Branch("pfPt",    &mPfPt);
+   mTree->Branch("pfEta",   &mPfEta);
+   mTree->Branch("pfPhi",   &mPfPhi);
+   mTree->Branch("pfE",     &mPfE);
+   mTree->Branch("pfEcorr", &mPfEcorr);
 
    mTree->Branch("pfE1x3",    &mPfE1x3);
    mTree->Branch("pfE2x2",    &mPfE2x2);
@@ -147,6 +148,8 @@ void PFClusterNtuplizer::analyze(const edm::Event& e, const edm::EventSetup& es)
             mPfEta = c.eta();
             mPfPhi = c.phi();
             mPfE   = c.energy();
+
+            mPfEcorr = c.correctedEnergy();
 
             mPfE1x3    = lazyTool.e1x3(c);
             mPfE2x2    = lazyTool.e2x2(c);
