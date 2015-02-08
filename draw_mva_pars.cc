@@ -1,4 +1,4 @@
-/* Helps draw_results.py to perform CPU-intensive tasks: fills and fits
+/* Helps draw_mva_pars.py to perform CPU-intensive tasks: fills and fits
  * histograms.
  */
 
@@ -19,25 +19,14 @@
 
 using namespace std;
 
-struct pair_t {
-   vector<float> x;
-   vector<float> y;
-};
-
-struct trio_t {
-   vector<float> x;
-   vector<float> y;
-   vector<float> z;
-};
-
 // global variables
-pair_t gDataE;    // array of (mcE,   pfE/mcE)
-pair_t gDataPt;   // array of (mcPt,  pfE/mcE)
-trio_t gDataEta;  // array of (mcEta, pfE/mcE, mcPt)
-trio_t gDataVtx;  // array of (nVtx,  pfE/mcE, mcPt)
+vector<float> gDataMcPt;     // mcPt
+vector<float> gDataPfEta;    // pfEta
+vector<float> gDataResol;    // pfE/mcE * [MVA's mean]
+vector<float> gDataExpWidth; // [MVA's sigma]/[MVA's mean]
 
-TGraphErrors* grMean = NULL;
-TGraphErrors* grSigma = NULL;  // NOTE: sigma = width/position
+TGraphErrors* grMeanVsMean = NULL;
+TGraphErrors* grSigmaVsSigma = NULL;
 
 //______________________________________________________________________________
 void SetBranchAddress(TTree* tree, const char* bname, void* ptr)
@@ -59,8 +48,7 @@ void SetBranchAddress(TTree* tree, const char* bname, void* ptr)
 }
 
 //______________________________________________________________________________
-void fill_arrays(const char* infile, const char* friendname,
-                 const char* mva_branch, bool isEE)
+void fill_arrays(const char* infile, const char* friendname, const char* mva_name)
 {
    // Fills global variables-arrays.
 
@@ -81,68 +69,35 @@ void fill_arrays(const char* infile, const char* friendname,
    tree->SetBranchStatus("*", 0);
 
    // variables to be associated with the input tree branches
-   Int_t nVtx;
-   float mcE, mcPt, mcEta, pfE, pfEta;
-   float mva_output;
+   float mcE, mcPt, pfE, pfEta;
+   float mva_mean, mva_sigma;
 
    // associate tree branches with variables
    SetBranchAddress(tree, "mcE",   &mcE);
    SetBranchAddress(tree, "mcPt",  &mcPt);
-   SetBranchAddress(tree, "mcEta", &mcEta);
    SetBranchAddress(tree, "pfE",   &pfE);
    SetBranchAddress(tree, "pfEta", &pfEta);
-   SetBranchAddress(tree, "nVtx",  &nVtx);
-
-   if (mva_branch[0] != '\0')
-      SetBranchAddress(tree, mva_branch, &mva_output);
+   SetBranchAddress(tree, Form("mva_mean_%s", mva_name), &mva_mean);
+   SetBranchAddress(tree, Form("mva_sigma_%s", mva_name), &mva_sigma);
 
    // cleanup from previous execution
-   gDataE.x.clear();
-   gDataE.y.clear();
-   gDataPt.x.clear();
-   gDataPt.y.clear();
-   gDataEta.x.clear();
-   gDataEta.y.clear();
-   gDataEta.z.clear();
-   gDataVtx.x.clear();
-   gDataVtx.y.clear();
-   gDataVtx.z.clear();
+   gDataMcPt.clear();
+   gDataPfEta.clear();
+   gDataResol.clear();
+   gDataExpWidth.clear();
 
    // loop over events and collect data
    for (Long64_t ev = 1; ev < tree->GetEntriesFast(); ev += 2) {// NOTE: take only test events
       if (tree->GetEntry(ev) <= 0)
          FATAL("TTree::GetEntry() failed");
 
-      float resol = pfE/mcE;
+      gDataMcPt.push_back(mcPt);
+      gDataPfEta.push_back(pfEta);
+      gDataResol.push_back(pfE/mcE * mva_mean);
 
-      // apply correction, if necessary
-      if (mva_branch[0] != '\0')
-         resol *= mva_output;
-
-      gDataEta.x.push_back(mcEta);
-      gDataEta.y.push_back(resol);
-      gDataEta.z.push_back(mcPt);
-
-      // barrel vs endcaps
-      if (isEE) {
-         if (fabs(pfEta) < 1.479)
-            continue;
-      } else {
-         if (fabs(pfEta) > 1.479)
-            continue;
-      }
-
-      gDataE.x.push_back(mcE);
-      gDataE.y.push_back(resol);
-
-      gDataPt.x.push_back(mcPt);
-      gDataPt.y.push_back(resol);
-
-      gDataVtx.x.push_back((float)nVtx);
-      gDataVtx.y.push_back(resol);
-      gDataVtx.z.push_back(mcPt);
-
-   } // event loop
+      // width of pfE/mcE distribution
+      gDataExpWidth.push_back(mva_sigma/mva_mean);
+   }
 }
 
 //______________________________________________________________________________
@@ -203,17 +158,17 @@ void fit_slices_real(vector<float>& x, vector<float>& y, int blockSize,
                      const char* title, const char* xtitle)
 {
     /* Fits distributions of sorted blocks of data points, result is given in
-     * grMean and grSigma -- positions and widths vs X axis.
+     * grMeanVsMean and grSigmaVsSigma.
      *
      * NOTE: sigma = width/position.
      */
 
    // cleanup from previous execution
-   if (grMean) delete grMean;
-   if (grSigma) delete grSigma;
+   if (grMeanVsMean) delete grMeanVsMean;
+   if (grSigmaVsSigma) delete grSigmaVsSigma;
 
-   grMean = new TGraphErrors();
-   grSigma = new TGraphErrors();
+   grMeanVsMean = new TGraphErrors();
+   grSigmaVsSigma = new TGraphErrors();
 
    size_t siz = x.size();
    if (siz < 1) FATAL("x.size() < 1");
@@ -255,7 +210,7 @@ void fit_slices_real(vector<float>& x, vector<float>& y, int blockSize,
       // create new canvas, if necessary
       if (b % 9 == 0) {
          if (c) {
-            c->SaveAs(Form("output/plots_results/%s.png", c->GetTitle()));
+            c->SaveAs(Form("output/plots_mva_pars/%s.png", c->GetTitle()));
 
             // memory cleanup
             delete c;
@@ -280,7 +235,7 @@ void fit_slices_real(vector<float>& x, vector<float>& y, int blockSize,
       gPad->SetTopMargin(0.08);
       gPad->SetBottomMargin(0.08);
 
-      h->SetTitle(Form("%s = %.2f #pm %.2f", xtitle, meanX, sigmaX));
+      h->SetTitle(Form("%s = (%.4f #pm %.2g)%%", xtitle, meanX * 100, sigmaX * 100));
       h->SetXTitle("E^{rec}/E^{gen}");
       h->SetYTitle("Entries");
       h->SetTitleOffset(1.6, "Y");
@@ -309,11 +264,11 @@ void fit_slices_real(vector<float>& x, vector<float>& y, int blockSize,
       h->Fit(fit, "QEM", "same", 0.65, 1.2);  // improves convergence
       h->Fit(fit, "QEML", "same", 0.65, 1.2);
 
-      grMean->SetPoint(b, meanX, fit->GetParameter(1));
-      grMean->SetPointError(b, sigmaX, fit->GetParError(1));
+      grMeanVsMean->SetPoint(b, meanX, fit->GetParameter(1));
+      grMeanVsMean->SetPointError(b, sigmaX, fit->GetParError(1));
 
-      grSigma->SetPoint(b, meanX, fit->GetParameter(2)/fit->GetParameter(1));
-      grSigma->SetPointError(b, sigmaX, fit->GetParError(2)/fit->GetParameter(1));
+      grSigmaVsSigma->SetPoint(b, meanX, fit->GetParameter(2)/fit->GetParameter(1));
+      grSigmaVsSigma->SetPointError(b, sigmaX, fit->GetParError(2)/fit->GetParameter(1));
 
       todel.push_back(h);
       todel.push_back(fit);
@@ -321,7 +276,7 @@ void fit_slices_real(vector<float>& x, vector<float>& y, int blockSize,
 
    // save the very last canvas
    if (c) {
-      c->SaveAs(Form("output/plots_results/%s.png", c->GetTitle()));
+      c->SaveAs(Form("output/plots_mva_pars/%s.png", c->GetTitle()));
 
       // memory cleanup
       delete c;
@@ -338,36 +293,34 @@ void fit_slices(int type, int blockSize, const char* title, const char* xtitle,
 {
    // Steers work of fit_slices_real().
 
-   // mcE
-   if (type == 0)
-      fit_slices_real(gDataE.x, gDataE.y, blockSize, title, xtitle);
+   // mcPt region, EB
+   if (type == 0) {
+      vector<float> x, y;
 
-   // mcPt
-   else if (type == 1)
-      fit_slices_real(gDataPt.x, gDataPt.y, blockSize, title, xtitle);
+      for (size_t i = 0; i < gDataMcPt.size(); i++) {
+         if (fabs(gDataPfEta[i]) > 1.479) continue;
+         if (gDataMcPt[i] < pt1 || gDataMcPt[i] >= pt2) continue;
 
-   // mcEta in mcPt region
-   else if (type == 2) {
-      pair_t data;
-      for (size_t i = 0; i < gDataEta.x.size(); i++) {
-         if (gDataEta.z[i] < pt1 || gDataEta.z[i] >= pt2) continue;
-         data.x.push_back(gDataEta.x[i]);
-         data.y.push_back(gDataEta.y[i]);
+         x.push_back(gDataExpWidth[i]);
+         y.push_back(gDataResol[i]);
       }
 
-      fit_slices_real(data.x, data.y, blockSize, title, xtitle);
+      fit_slices_real(x, y, blockSize, title, xtitle);
    }
 
-   // mcVtx in mcPt region
-   else if (type == 3) {
-      pair_t data;
-      for (size_t i = 0; i < gDataVtx.x.size(); i++) {
-         if (gDataVtx.z[i] < pt1 || gDataVtx.z[i] >= pt2) continue;
-         data.x.push_back(gDataVtx.x[i]);
-         data.y.push_back(gDataVtx.y[i]);
+   // mcPt region, EE
+   else if (type == 1) {
+      vector<float> x, y;
+
+      for (size_t i = 0; i < gDataMcPt.size(); i++) {
+         if (fabs(gDataPfEta[i]) < 1.479) continue;
+         if (gDataMcPt[i] < pt1 || gDataMcPt[i] >= pt2) continue;
+
+         x.push_back(gDataExpWidth[i]);
+         y.push_back(gDataResol[i]);
       }
 
-      fit_slices_real(data.x, data.y, blockSize, title, xtitle);
+      fit_slices_real(x, y, blockSize, title, xtitle);
    }
 
    else
