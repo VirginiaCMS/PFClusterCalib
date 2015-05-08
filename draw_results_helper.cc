@@ -33,8 +33,8 @@ struct trio_t {
 // global variables
 pair_t gDataE;    // array of (mcE,   pfE/mcE)
 pair_t gDataPt;   // array of (mcPt,  pfE/mcE)
-trio_t gDataEta;  // array of (mcEta, pfE/mcE, mcPt)
-trio_t gDataVtx;  // array of (nVtx,  pfE/mcE, mcPt)
+trio_t gDataEta;  // array of (mcEta, pfE/mcE, mcE)
+trio_t gDataVtx;  // array of (nVtx,  pfE/mcE, mcE)
 
 TGraphErrors* grMean = NULL;
 TGraphErrors* grSigma = NULL;  // NOTE: sigma = width/position
@@ -121,7 +121,7 @@ void fill_arrays(const char* infile, const char* friendname,
 
       gDataEta.x.push_back(mcEta);
       gDataEta.y.push_back(resol);
-      gDataEta.z.push_back(mcPt);
+      gDataEta.z.push_back(mcE);
 
       // barrel vs endcaps
       if (isEE) {
@@ -140,7 +140,7 @@ void fill_arrays(const char* infile, const char* friendname,
 
       gDataVtx.x.push_back((float)nVtx);
       gDataVtx.y.push_back(resol);
-      gDataVtx.z.push_back(mcPt);
+      gDataVtx.z.push_back(mcE);
 
    } // event loop
 }
@@ -228,6 +228,9 @@ void fit_slices_real(vector<float>& x, vector<float>& y, int blockSize,
    TCanvas* c = NULL;
    vector<TObject*> todel(64);
 
+   // counter of accepted blocks
+   int b0 = 0;
+
    // loop over blocks of ordered data
    for (int b = 0; b < nblocks; b++) {
       vector<float> bx;
@@ -248,14 +251,14 @@ void fit_slices_real(vector<float>& x, vector<float>& y, int blockSize,
       MeanSigma(by, meanY, sigmaY);
 
       // fill histogram
-      TH1* h = new TH1D("h", "", 200, 0.65, 1.2);
+      TH1* h = new TH1D("h", "", 100, 0.55, 1.3);
       for (size_t i = 0; i < by.size(); i++)
          h->Fill(by[i]);
 
       // create new canvas, if necessary
       if (b % 9 == 0) {
          if (c) {
-            c->SaveAs(Form("output/plots_results/%s.png", c->GetTitle()));
+            c->SaveAs(Form("output/plots_results/fits/%s.png", c->GetTitle()));
 
             // memory cleanup
             delete c;
@@ -294,26 +297,46 @@ void fit_slices_real(vector<float>& x, vector<float>& y, int blockSize,
          "( (x-[1])/[2] < [5] ? exp(-(x-[1])^2/(2*[2]*[2])) : exp(0.5*[5]*[5] - [5]*(x-[1])/[2]) ) : "
          "([4]/[3])^[4] * exp(-0.5*[3]^2) * (-(x-[1])/[2]-[3]+[4]/[3])^(-[4]) )";
 
-      TF1* fit = new TF1("fit", expr, 0.65, 1.2);
+      TF1* fit = new TF1("fit", expr, 0.55, 1.3);
       fit->SetLineWidth(1);
       fit->SetNpx(2000);
 
-      fit->SetParameters(h->GetMaximum(), meanY, sigmaY, 1.5, 5, 1.5);
-      fit->SetParLimits(0, 0.33 * h->GetMaximum(), 3 * h->GetMaximum());
-      fit->SetParLimits(1, 0.65, 1.2);
-      fit->SetParLimits(2, 0.33 * sigmaY, 1.5 * sigmaY);
-      fit->SetParLimits(3, 0, 10);
+      fit->SetParameters(h->GetMaximum(), meanY, 0.5 * sigmaY, 1.5, 5, 1.5);
+      fit->SetParLimits(0, 0.33 * h->GetMaximum(), 2 * h->GetMaximum());
+      fit->SetParLimits(1, meanY - sigmaY, meanY + sigmaY);
+      fit->SetParLimits(2, 0.1 * sigmaY, 1.1 * sigmaY);
+
+      // pre-fit to improve convergence (especially in the EB/EE gap region)
+      fit->FixParameter(3, 1.5);
+      fit->FixParameter(4, 5);
+      fit->FixParameter(5, 1.5);
+      h->Fit(fit, "QEM", "same", 0.55, 1.3);
+
+      fit->SetParLimits(3, 0.4, 10);
       fit->SetParLimits(4, 1.01, 100);
-      fit->SetParLimits(5, 0, 10);
+      fit->SetParLimits(5, 0.4, 10);
+      h->Fit(fit, "QEM", "same", 0.55, 1.3);
 
-      h->Fit(fit, "QEM", "same", 0.65, 1.2);  // improves convergence
-      h->Fit(fit, "QEML", "same", 0.65, 1.2);
+      fit->ReleaseParameter(0);
+      fit->ReleaseParameter(0);
+      fit->SetParLimits(1, 0.65, 1.2);
+      fit->SetParLimits(2, 0, 1.1 * sigmaY);
+      fit->ReleaseParameter(3);
+      fit->ReleaseParameter(4);
+      fit->ReleaseParameter(5);
+      h->Fit(fit, "QEML", "same", 0.55, 1.3);
 
-      grMean->SetPoint(b, meanX, fit->GetParameter(1));
-      grMean->SetPointError(b, sigmaX, fit->GetParError(1));
+      // do not accept really bad fitting results
+      if (fit->GetParError(1)/fit->GetParameter(1) < 0.15 &&
+          fit->GetParError(2)/fit->GetParameter(2) < 0.15) {
+        grMean->SetPoint(b0, meanX, fit->GetParameter(1));
+        grMean->SetPointError(b0, sigmaX, fit->GetParError(1));
 
-      grSigma->SetPoint(b, meanX, fit->GetParameter(2)/fit->GetParameter(1));
-      grSigma->SetPointError(b, sigmaX, fit->GetParError(2)/fit->GetParameter(1));
+        grSigma->SetPoint(b0, meanX, fit->GetParameter(2)/fit->GetParameter(1));
+        grSigma->SetPointError(b0, sigmaX, fit->GetParError(2)/fit->GetParameter(1));
+
+        b0++;
+      }
 
       todel.push_back(h);
       todel.push_back(fit);
@@ -321,7 +344,7 @@ void fit_slices_real(vector<float>& x, vector<float>& y, int blockSize,
 
    // save the very last canvas
    if (c) {
-      c->SaveAs(Form("output/plots_results/%s.png", c->GetTitle()));
+      c->SaveAs(Form("output/plots_results/fits/%s.png", c->GetTitle()));
 
       // memory cleanup
       delete c;
@@ -334,7 +357,7 @@ void fit_slices_real(vector<float>& x, vector<float>& y, int blockSize,
 
 //______________________________________________________________________________
 void fit_slices(int type, int blockSize, const char* title, const char* xtitle,
-                double pt1=0, double pt2=0)
+                double e1 = 0, double e2 = 0)
 {
    // Steers work of fit_slices_real().
 
@@ -346,11 +369,11 @@ void fit_slices(int type, int blockSize, const char* title, const char* xtitle,
    else if (type == 1)
       fit_slices_real(gDataPt.x, gDataPt.y, blockSize, title, xtitle);
 
-   // mcEta in mcPt region
+   // mcEta in mcE region
    else if (type == 2) {
       pair_t data;
       for (size_t i = 0; i < gDataEta.x.size(); i++) {
-         if (gDataEta.z[i] < pt1 || gDataEta.z[i] >= pt2) continue;
+         if (gDataEta.z[i] < e1 || gDataEta.z[i] >= e2) continue;
          data.x.push_back(gDataEta.x[i]);
          data.y.push_back(gDataEta.y[i]);
       }
@@ -358,11 +381,11 @@ void fit_slices(int type, int blockSize, const char* title, const char* xtitle,
       fit_slices_real(data.x, data.y, blockSize, title, xtitle);
    }
 
-   // mcVtx in mcPt region
+   // mcVtx in mcE region
    else if (type == 3) {
       pair_t data;
       for (size_t i = 0; i < gDataVtx.x.size(); i++) {
-         if (gDataVtx.z[i] < pt1 || gDataVtx.z[i] >= pt2) continue;
+         if (gDataVtx.z[i] < e1 || gDataVtx.z[i] >= e2) continue;
          data.x.push_back(gDataVtx.x[i]);
          data.y.push_back(gDataVtx.y[i]);
       }

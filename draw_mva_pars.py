@@ -37,7 +37,7 @@ def main():
     txts = [f[f.rfind('gun_') + 4:].replace('.root', '') for f in infiles]
 
     # make output directories
-    for d in ['output', 'output/cache', 'output/plots_mva_pars']:
+    for d in ['output', 'output/cache', 'output/plots_mva_pars', 'output/plots_mva_pars/fits']:
         if not os.access(d, os.X_OK):
             os.mkdir(d)
 

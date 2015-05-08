@@ -210,7 +210,7 @@ void fit_slices_real(vector<float>& x, vector<float>& y, int blockSize,
       // create new canvas, if necessary
       if (b % 9 == 0) {
          if (c) {
-            c->SaveAs(Form("output/plots_mva_pars/%s.png", c->GetTitle()));
+            c->SaveAs(Form("output/plots_mva_pars/fits/%s.png", c->GetTitle()));
 
             // memory cleanup
             delete c;
@@ -276,7 +276,7 @@ void fit_slices_real(vector<float>& x, vector<float>& y, int blockSize,
 
    // save the very last canvas
    if (c) {
-      c->SaveAs(Form("output/plots_mva_pars/%s.png", c->GetTitle()));
+      c->SaveAs(Form("output/plots_mva_pars/fits/%s.png", c->GetTitle()));
 
       // memory cleanup
       delete c;

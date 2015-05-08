@@ -61,11 +61,15 @@ class PFClusterNtuplizer : public edm::EDAnalyzer {
    Int_t mPfSize5x5_noZS;
    float mPfPt;
    float mPfEta;
+   Int_t mPfIEtaIX;
+   Int_t mPfIPhiIY;
    float mPfPhi;
    float mPfE;
    float mPfEcorr;  // with old correction applied
 
    // EcalClusterLazyTools
+   float mPfEMax;
+   float mPfE2nd;
    float mPfE1x3;
    float mPfE2x2;
    float mPfE2x5Max;
@@ -73,6 +77,8 @@ class PFClusterNtuplizer : public edm::EDAnalyzer {
    float mPfE5x5;
 
    // noZS::EcalClusterLazyTools
+   float mPfEMax_noZS;
+   float mPfE2nd_noZS;
    float mPfE1x3_noZS;
    float mPfE2x2_noZS;
    float mPfE2x5Max_noZS;

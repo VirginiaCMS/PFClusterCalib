@@ -42,25 +42,30 @@ def main():
         r = [make_histos(infile, det) for infile in infiles]
 
         # repack histograms into per-pileup tuples;
-        # order: hE hEta hPhi hR13 hR22 hR25 hR33 hR55 hNVtx hPs1R hPs2R hPs1N hPs2N
+        # order: hE hEta hPhi hRMax hR2nd hR13 hR22 hR25 hR33 hR55 hNVtx
+        #        hIEtaIX hIPhiIY hPs1R hPs2R hPs1N hPs2N
         r = list(zip(*r))
 
         combine(r[0], txts, 'energy_' + det, det, 'Energy (GeV)', 700 if det == 'EE' else 300)
-        combine(r[1], txts, 'eta_' + det, det, '#eta')
-        combine(r[2], txts, 'phi_' + det, det, '#phi')
-        combine(r[3], txts, 'r13_' + det, det, 'E_{1x3}/E')
-        combine(r[4], txts, 'r22_' + det, det, 'E_{2x2}/E')
-        combine(r[5], txts, 'r25_' + det, det, 'E_{2x5,max}/E')
-        combine(r[6], txts, 'r33_' + det, det, 'E_{3x3}/E')
-        combine(r[7], txts, 'r55_' + det, det, 'E_{5x5}/E')
-        combine(r[8], txts, 'nVtx_' + det, det, 'nVtx')
+        combine(r[1], txts, 'eta_'  + det, det, '#eta')
+        combine(r[2], txts, 'phi_'  + det, det, '#phi')
+        combine(r[3], txts, 'rmax_' + det, det, 'E_{Max}/E')
+        combine(r[4], txts, 'r2nd_' + det, det, 'E_{2nd}/E')
+        combine(r[5], txts, 'r13_'  + det, det, 'E_{1x3}/E')
+        combine(r[6], txts, 'r22_'  + det, det, 'E_{2x2}/E')
+        combine(r[7], txts, 'r25_'  + det, det, 'E_{2x5,max}/E')
+        combine(r[8], txts, 'r33_'  + det, det, 'E_{3x3}/E')
+        combine(r[9], txts, 'r55_'  + det, det, 'E_{5x5}/E')
+        combine(r[10], txts, 'nVtx_' + det, det, 'nVtx')
+        combine(r[11], txts, 'ietaix_' + det, det, 'i#eta' if det == 'EB' else 'ix')
+        combine(r[12], txts, 'iphiiy_' + det, det, 'i#phi' if det == 'EB' else 'iy')
 
         # preshower
         if det == 'EE':
-            combine(r[9],  txts, 'ps1r_' + det, det, 'E_{ps1}/E', -1, topLegend=True)
-            combine(r[10], txts, 'ps2r_' + det, det, 'E_{ps2}/E', -1, topLegend=True)
-            combine(r[11], txts, 'ps1n_' + det, det, 'N_{ps1}',  -1, topLegend=True)
-            combine(r[12], txts, 'ps2n_' + det, det, 'N_{ps2}',  -1, topLegend=True)
+            combine(r[13],  txts, 'ps1r_' + det, det, 'E_{ps1}/E', -1, topLegend=True)
+            combine(r[14], txts, 'ps2r_' + det, det, 'E_{ps2}/E', -1, topLegend=True)
+            combine(r[15], txts, 'ps1n_' + det, det, 'N_{ps1}',  -1, topLegend=True)
+            combine(r[16], txts, 'ps2n_' + det, det, 'N_{ps2}',  -1, topLegend=True)
 
     # draw distributions of deltaR vs pT slices
     for det in ['EB', 'EE']:
@@ -119,6 +124,8 @@ def make_histos(infile, det='EB'):
     hE    = ROOT.TH1D('h', '', 250, 0, 1000)
     hEta  = ROOT.TH1D('h', '', 150, -3.2, 3.2)
     hPhi  = ROOT.TH1D('h', '', 150, -3.4, 3.4)
+    hRMax = ROOT.TH1D('h', '', 250, 0, 1.05)
+    hR2nd = ROOT.TH1D('h', '', 250, 0, 0.5)
     hR13  = ROOT.TH1D('h', '', 200, 0.4, 1.05)
     hR22  = ROOT.TH1D('h', '', 250, 0.7, 1.05)
     hR25  = ROOT.TH1D('h', '', 250, 0.8, 1.05)
@@ -126,7 +133,13 @@ def make_histos(infile, det='EB'):
     hR55  = ROOT.TH1D('h', '', 250, 0.9, 1.05)
     hNVtx = ROOT.TH1D('h', '', 60, 0, 60)
 
-    if det == 'EE':
+    if det == 'EB':
+        hIEta = ROOT.TH1D('h', '', 200, -100, 100)
+        hIPhi = ROOT.TH1D('h', '', 370, 0, 370)
+    else:
+        hIEta = ROOT.TH1D('h', '', 105, 0, 105)  # ix
+        hIPhi = ROOT.TH1D('h', '', 105, 0, 105)  # iy
+
         hPs1R = ROOT.TH1D('h', '', 250, 0, 0.3e-3)
         hPs2R = ROOT.TH1D('h', '', 250, 0, 0.5e-3)
         hPs1N = ROOT.TH1D('h', '', 50, 0, 50)
@@ -151,18 +164,23 @@ def make_histos(infile, det='EB'):
             if abs(tree.pfEta) < 1.479:
                 continue
 
-        # for brevity and better performance
+        # for brevity and slightly better performance
         E = tree.pfE
 
         hE.Fill(E)
         hEta.Fill(tree.pfEta)
         hPhi.Fill(tree.pfPhi)
-        hR13.Fill(tree.pfE1x3/E)
-        hR22.Fill(tree.pfE2x2/E)
-        hR25.Fill(tree.pfE2x5Max/E)
-        hR33.Fill(tree.pfE3x3/E)
-        hR55.Fill(tree.pfE5x5/E)
+        hRMax.Fill(tree.pfEMax/E)
+        hR2nd.Fill(tree.pfE2nd/E)
+        hR13 .Fill(tree.pfE1x3/E)
+        hR22 .Fill(tree.pfE2x2/E)
+        hR25 .Fill(tree.pfE2x5Max/E)
+        hR33 .Fill(tree.pfE3x3/E)
+        hR55 .Fill(tree.pfE5x5/E)
         hNVtx.Fill(tree.nVtx)
+
+        hIEta.Fill(tree.pfIEtaIX)
+        hIPhi.Fill(tree.pfIPhiIY)
 
         if det == 'EE':
             hPs1R.Fill(tree.ps1E/E)
@@ -170,12 +188,12 @@ def make_histos(infile, det='EB'):
             hPs1N.Fill(tree.ps1N)
             hPs2N.Fill(tree.ps2N)
 
-
     if det == 'EB':
-        result = (hE, hEta, hPhi, hR13, hR22, hR25, hR33, hR55, hNVtx)
+        result = (hE, hEta, hPhi, hRMax, hR2nd, hR13, hR22, hR25, hR33, hR55,
+                  hNVtx, hIEta, hIPhi)
     else:
-        result = (hE, hEta, hPhi, hR13, hR22, hR25, hR33, hR55, hNVtx,
-                  hPs1R, hPs2R, hPs1N, hPs2N)
+        result = (hE, hEta, hPhi, hRMax, hR2nd, hR13, hR22, hR25, hR33, hR55,
+                  hNVtx, hIEta, hIPhi, hPs1R, hPs2R, hPs1N, hPs2N)
 
     # normalization
     for h in result:

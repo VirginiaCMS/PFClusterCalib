@@ -8,6 +8,7 @@
 #include <TTree.h>
 #include <TROOT.h>
 #include <TSystem.h>
+#include <TString.h>
 #include <RooRealVar.h>
 #include <RooDataSet.h>
 #include <RooConstVar.h>
@@ -24,34 +25,40 @@
 
 using namespace RooFit;
 
-void train_one(const char* infile, const char* outfile, const char* ws_name,
-               bool isEE, int pfSize, bool useNumVtx)
+void train_one(const char* infile, const char* outfile, bool isEE, int pfSize, bool useNumVtx,
+               double ptMin = -1, double ptMax = -1)
 {
-   /* Main function.
+   /* Trains one MVA.
     *
     * pfSize = 1: train only on 1x1 PFClusters;
     * pfSize = 2: train only on 1x2 PFClusters;
     * pfSize = any other value: train on all PFClusters, excluding 1x1 and 1x2;
     *
-    * useNumVtx = if true, nVtx branch will be used as MVA input.
+    * useNumVtx = if true, nVtx branch will be used as MVA input;
+    *
+    * [ptMin, ptMax) = take only events from this particular pfPt region;
+    * negative ptMin/ptMax = no lower/upper limit.
     */
+
+   fprintf(stderr, "   %s, pfSize=%i%s, useNumVtx=%i, ptMin=%.1f, ptMax=%.1f: %s ...\n",
+          isEE ? "EE" : "EB", pfSize, pfSize > 2 ? "+" : " ", (int)useNumVtx, ptMin, ptMax, infile);
 
    // input variables + target variable
    RooArgList allvars;
 
    allvars.addOwned(*new RooRealVar("var1", "pfE",                0));
-   allvars.addOwned(*new RooRealVar("var2", "pfEta",              0));
-   allvars.addOwned(*new RooRealVar("var3", "pfPhi",              0));
+   allvars.addOwned(*new RooRealVar("var2", "pfIEtaIX",           0));
+   allvars.addOwned(*new RooRealVar("var3", "pfIPhiIY",           0));
 
-   if (pfSize != 1)
-      allvars.addOwned(*new RooRealVar("var4", "pfE1x3/pfE",    0));
-
-   if (pfSize != 1 && pfSize != 2) {
-      allvars.addOwned(*new RooRealVar("var5", "pfE2x2/pfE",    0));
-      allvars.addOwned(*new RooRealVar("var6", "pfE2x5Max/pfE", 0));
-      allvars.addOwned(*new RooRealVar("var7", "pfE3x3/pfE",    0));
-      allvars.addOwned(*new RooRealVar("var8", "pfE5x5/pfE",    0));
-   }
+//    if (pfSize != 1)
+//       allvars.addOwned(*new RooRealVar("var4", "pfE1x3/pfE",    0));
+//
+//    if (pfSize != 1 && pfSize != 2) {
+//       allvars.addOwned(*new RooRealVar("var5", "pfE2x2/pfE",    0));
+//       allvars.addOwned(*new RooRealVar("var6", "pfE2x5Max/pfE", 0));
+//       allvars.addOwned(*new RooRealVar("var7", "pfE3x3/pfE",    0));
+//       allvars.addOwned(*new RooRealVar("var8", "pfE5x5/pfE",    0));
+//    }
 
    if (useNumVtx)
       allvars.addOwned(*new RooRealVar("nVtx", "nVtx", 0));
@@ -67,14 +74,14 @@ void train_one(const char* infile, const char* outfile, const char* ws_name,
    // target variable
    // NOTE: preshower energy is not subtracted
    // NOTE: limits were evaluated with draw_inputs.py
-   RooRealVar* target = new RooRealVar("target", "mcE/pfE", 1., 1/1.4, 1/0.4);
+   RooRealVar* target = new RooRealVar("target", "log(mcE/pfE)", 0., -0.336, 0.916);
    allvars.addOwned(*target);
 
    // variables corresponding to regressed parameters
-   RooRealVar mean("mean", "", 1.);
-   RooRealVar sigma("sigma", "", 0.015);
-   RooRealVar alphaL("alphaL", "", 1.5);
-   RooRealVar alphaR("alphaR", "", 1.8);
+   RooRealVar mean("mean", "", 0.);
+   RooRealVar sigma("sigma", "", 0.1);
+   RooRealVar alphaL("alphaL", "", 1.2);
+   RooRealVar alphaR("alphaR", "", 2.0);
    RooRealVar powerR("powerR", "", 5);
 
    mean.setConstant(false);
@@ -98,8 +105,8 @@ void train_one(const char* infile, const char* outfile, const char* ws_name,
    RooGBRTargetFlex tgtPowerR("tgtPowerR", "", funcPowerR, powerR, invars);
 
    // parameters' bounds
-   RooRealConstraint limMean("limMean", "", tgtMean, 1/1.4, 1/0.4);
-   RooRealConstraint limSigma("limSigma", "", tgtSigma, 0.003, 0.5);
+   RooRealConstraint limMean("limMean", "", tgtMean, -0.336, 0.916);
+   RooRealConstraint limSigma("limSigma", "", tgtSigma, 0.001, 0.4);
    RooRealConstraint limAlphaL("limAlphaL", "", tgtAlphaL, 0.2, 7.);
    RooRealConstraint limAlphaR("limAlphaR", "", tgtAlphaR, 0.2, 7.);
    RooRealConstraint limPowerR("limPowerR", "", tgtPowerR, 1.01, 100.);
@@ -109,22 +116,17 @@ void train_one(const char* infile, const char* outfile, const char* ws_name,
    if (pfSize == 1 || pfSize == 2)
       pdf = new RooGausDoubleExp("pdfGausDoubleExp", "", *target, limMean, limSigma, limAlphaL, limAlphaR);
    else
-      // NOTE: freeing alphaL destroys convergence of fits
-      pdf = new RooRevCBExp("pdfRevCBExp", "", *target, limMean, limSigma, RooConst(1.8), limAlphaR, limPowerR);
+      pdf = new RooRevCBExp("pdfRevCBExp", "", *target, limMean, limSigma, limAlphaL, limAlphaR, limPowerR);
 
    // list of mapped functions to regress
    RooArgList tgts;
    tgts.add(tgtMean);
    tgts.add(tgtSigma);
+   tgts.add(tgtAlphaL);
+   tgts.add(tgtAlphaR);
 
-   if (pfSize == 1 || pfSize == 2) {
-      tgts.add(tgtAlphaL);
-      tgts.add(tgtAlphaR);
-   }
-   else {
-      tgts.add(tgtAlphaR);
+   if (pfSize != 1 && pfSize != 2)
       tgts.add(tgtPowerR);
-   }
 
    // list of pdfs
    std::vector<RooAbsReal*> pdfs;
@@ -162,6 +164,11 @@ void train_one(const char* infile, const char* outfile, const char* ws_name,
    else
       cuts += "pfSize5x5_ZS >= 3";
 
+   if (ptMin > 0)
+      cuts += TString::Format("pfPt >= %f", ptMin);
+   if (ptMax > 0)
+      cuts += TString::Format("pfPt < %f", ptMax);
+
    // per-event weight
    // NOTE: title is used for per-event weights and selection cuts
    RooRealVar weightvar("weightvar", "", 1.);
@@ -183,15 +190,44 @@ void train_one(const char* infile, const char* outfile, const char* ws_name,
 
    // training
    RooHybridBDTAutoPdf bdtpdfdiff("bdtpdfdiff", "", tgts, etermconst, r, datasets, pdfs);
-   bdtpdfdiff.SetMinCutSignificance(5.);
+   if (pfSize == 1 || pfSize == 2)
+      bdtpdfdiff.SetMinCutSignificance(1.);
+   else
+      bdtpdfdiff.SetMinCutSignificance(5.);
    //bdtpdfdiff.SetPrescaleInit(100);
    bdtpdfdiff.SetShrinkage(0.1);
    bdtpdfdiff.SetMinWeights(minweights);
    bdtpdfdiff.SetMaxNodes(750);
    bdtpdfdiff.TrainForest(1e+6); // NOTE: valid training will stop at ~100-500 trees
 
+   // unique name of output workspace
+   TString wsname = TString::Format("ws_mva_%s_pfSize%i", isEE ? "EE" : "EB", pfSize);
+   if (ptMin > -0.5)
+      wsname += TString::Format("_ptMin%.1f", ptMin);
+   if (ptMax > -0.5)
+      wsname += TString::Format("_ptMax%.1f", ptMax);
+
    // save output to file
-   RooWorkspace* ws = new RooWorkspace(ws_name);
+   RooWorkspace* ws = new RooWorkspace(wsname);
    ws->import(*pdf);
    ws->writeToFile(outfile, false); // false = update output file, not recreate
+
+   // NOTE: no memory cleanup for simplicity
+}
+
+void train(const char* infile, const char* outfile, bool useNumVtx)
+{
+   // Steering function.
+
+   // EB vs EE
+   for (int i = 0; i < 2; i++) {
+      bool isEE = (i == 0 ? false : true);
+
+      train_one(infile, outfile, isEE, 1, useNumVtx);
+      train_one(infile, outfile, isEE, 2, useNumVtx);
+
+      train_one(infile, outfile, isEE, 3, useNumVtx, 0, 5);
+      train_one(infile, outfile, isEE, 3, useNumVtx, 4, 20);
+      train_one(infile, outfile, isEE, 3, useNumVtx, 16, -1);
+   }
 }

@@ -30,46 +30,32 @@ ntuples=`ls input/*.root`
 
 mkdir -p output
 
-echo "Training semi-parametric MVAs with GBRLikelihood:"
+echo "Training semi-parametric MVAs with GBRLikelihood:" 1>&2
 
 for infile in $ntuples; do
     # extract file name without extension
     fname="${infile##*/}"
     fname="${fname%.root}"
 
-    # remove previous result, if any
-    rm -f output/training_results_${fname}.root
-
     # do not use nVtx as input for the no-pileup MC
     useNumVtx=true
     [ "${fname%_rereco}" == "ntuple_photongun_nopu" ] && useNumVtx=false
 
-    for pfSize in 1 2 3; do
-        suff=" "
-        [ "$pfSize" == 3 ] && suff="+"
+    # remove previous result, if any
+    rm -f output/training_results_${fname}.root
 
-        # ECAL barrel
-        echo "   EB, pfSize=${pfSize}${suff}, useNumVtx=${useNumVtx}: ${infile} ..."
-        echo "
-            .x rootlogon.C
-            .x train_one.cc+(\"${infile}\", \"output/training_results_${fname}.root\", \"ws_mva_EB_pfSize${pfSize}\", false, ${pfSize}, ${useNumVtx})
-            .q" | root -b -l &>output/train_${fname}_EB_pfSize${pfSize}.log
-
-        # ECAL endcaps
-        echo "   EE, pfSize=${pfSize}${suff}, useNumVtx=${useNumVtx}: ${infile} ..."
-        echo "
-            .x rootlogon.C
-            .x train_one.cc+(\"${infile}\", \"output/training_results_${fname}.root\", \"ws_mva_EE_pfSize${pfSize}\", true, ${pfSize}, ${useNumVtx})
-            .q" | root -b -l &>output/train_${fname}_EE_pfSize${pfSize}.log
-    done
+    echo "
+        .x rootlogon.C
+        .x train.cc+(\"${infile}\", \"output/training_results_${fname}.root\", ${useNumVtx})
+        .q" | root -b -l >output/train_${fname}.log
 done
 
-echo "Evaluating outputs from semi-parametric MVAs:"
+echo "Evaluating outputs from semi-parametric MVAs:" 1>&2
 
 # compile eval_one.cc
 echo "
    .x rootlogon.C
-   .L eval_one.cc+
+   .L eval.cc+
    .q" | root -b -l
 
 # prepare common CINT commands for the next "for" block
@@ -84,12 +70,12 @@ for infile in $ntuples; do
     fname="${infile##*/}"
     fname="${fname%.root}"
 
-    echo "   ${infile} ..."
+    echo "   ${infile} ..." 1>&2
 
     echo "
         .x rootlogon.C
         $cmd
-        .x eval_one.cc+(\"${infile}\", \"output/friend_${fname}.root\", fnames)
+        .x eval.cc+(\"${infile}\", \"output/friend_${fname}.root\", fnames)
         .q" | root -b -l &
 
 done
@@ -104,6 +90,9 @@ python draw_slices.py &
 
 # draw/save some train vs test slices
 python draw_overtraining.py &
+
+# draw/save real vs estimated energy resolutions.
+python draw_mva_pars.py &
 
 wait
 

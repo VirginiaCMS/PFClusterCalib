@@ -45,18 +45,24 @@ PFClusterNtuplizer::PFClusterNtuplizer(const edm::ParameterSet& cfg)
    mTree->Branch("pfSize5x5_ZS",   &mPfSize5x5_ZS);
    mTree->Branch("pfSize5x5_noZS", &mPfSize5x5_noZS);
 
-   mTree->Branch("pfPt",    &mPfPt);
-   mTree->Branch("pfEta",   &mPfEta);
-   mTree->Branch("pfPhi",   &mPfPhi);
-   mTree->Branch("pfE",     &mPfE);
-   mTree->Branch("pfEcorr", &mPfEcorr);
+   mTree->Branch("pfPt",      &mPfPt);
+   mTree->Branch("pfEta",     &mPfEta);
+   mTree->Branch("pfPhi",     &mPfPhi);
+   mTree->Branch("pfIEtaIX",  &mPfIEtaIX);
+   mTree->Branch("pfIPhiIY",  &mPfIPhiIY);
+   mTree->Branch("pfE",       &mPfE);
+   mTree->Branch("pfEcorr",   &mPfEcorr);
 
+   mTree->Branch("pfEMax",    &mPfEMax);
+   mTree->Branch("pfE2nd",    &mPfE2nd);
    mTree->Branch("pfE1x3",    &mPfE1x3);
    mTree->Branch("pfE2x2",    &mPfE2x2);
    mTree->Branch("pfE2x5Max", &mPfE2x5Max);
    mTree->Branch("pfE3x3",    &mPfE3x3);
    mTree->Branch("pfE5x5",    &mPfE5x5);
 
+   mTree->Branch("pfEMax_noZS",    &mPfEMax_noZS);
+   mTree->Branch("pfE2nd_noZS",    &mPfE2nd_noZS);
    mTree->Branch("pfE1x3_noZS",    &mPfE1x3_noZS);
    mTree->Branch("pfE2x2_noZS",    &mPfE2x2_noZS);
    mTree->Branch("pfE2x5Max_noZS", &mPfE2x5Max_noZS);
@@ -151,12 +157,31 @@ void PFClusterNtuplizer::analyze(const edm::Event& e, const edm::EventSetup& es)
 
             mPfEcorr = c.correctedEnergy();
 
+            if (c.layer() == PFLayer::ECAL_BARREL) {
+               EBDetId ebseed(c.seed());
+               mPfIEtaIX = ebseed.ieta();
+               mPfIPhiIY = ebseed.iphi();
+            }
+            else if (c.layer() == PFLayer::ECAL_ENDCAP) {
+               EEDetId eeseed(c.seed());
+               mPfIEtaIX = eeseed.ix();
+               mPfIPhiIY = eeseed.iy();
+            }
+            else {
+               mPfIEtaIX = -99999;
+               mPfIPhiIY = -99999;
+            }
+
+            mPfEMax    = lazyTool.eMax(c);
+            mPfE2nd    = lazyTool.e2nd(c);
             mPfE1x3    = lazyTool.e1x3(c);
             mPfE2x2    = lazyTool.e2x2(c);
             mPfE3x3    = lazyTool.e3x3(c);
             mPfE5x5    = lazyTool.e5x5(c);
             mPfE2x5Max = lazyTool.e2x5Max(c);
 
+            mPfEMax_noZS    = lazyTool_noZS.eMax(c);
+            mPfE2nd_noZS    = lazyTool_noZS.e2nd(c);
             mPfE1x3_noZS    = lazyTool_noZS.e1x3(c);
             mPfE2x2_noZS    = lazyTool_noZS.e2x2(c);
             mPfE3x3_noZS    = lazyTool_noZS.e3x3(c);

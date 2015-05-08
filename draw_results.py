@@ -27,91 +27,81 @@ def main():
     ROOT.gROOT.LoadMacro('draw_results_helper.cc+')
 
     # ntuples to process
-    infiles = fnmatch.filter(os.listdir('input'), '*.root')
-    infiles = sorted('input/' + f for f in infiles)
+    ntuples = fnmatch.filter(os.listdir('input'), '*.root')
+    ntuples = sorted('input/' + f for f in ntuples)
 
-    # names of MVAs
-    mva_names = ['mva_mean_' + f[f.rfind('/') + 1:].replace('.root', '') for f in infiles]
+    # MVAs to process
+    mvas = [f[f.rfind('/') + 1:].replace('.root', '') for f in ntuples]
 
     # text in legends
-    txts = [f[f.rfind('gun_') + 4:].replace('.root', '') for f in infiles]
+    txts = [f[f.rfind('gun_') + 4:].replace('.root', '') for f in ntuples]
     txts = [t + ', no correction' for t in txts] + txts[:]
 
     # make output directories
-    for d in ['output', 'output/cache', 'output/plots_results']:
+    for d in ['output', 'output/cache', 'output/plots_results', 'output/plots_results/fits']:
         if not os.access(d, os.X_OK):
             os.mkdir(d)
 
+    eregions = [(0, 1), (1, 2), (2, 10), (10, 20), (20, 100), (100, 1000)]
+
     for det in ['EB', 'EE']:
-        for mva_branch in mva_names:
-            r  = [make_graphs(f, det, '',         blockSize=10000) for f in infiles]
-            r += [make_graphs(f, det, mva_branch, blockSize=10000) for f in infiles]
+        for mva in mvas:
+            r  = [make_graphs(f, det, '',                eregions, blockSize=3000) for f in ntuples]
+            r += [make_graphs(f, det, 'mva_mean_' + mva, eregions, blockSize=3000) for f in ntuples]
 
             # repack graphs into per-parameter tuples
             r = list(zip(*r))
 
+            # text in captions
+            cap = 'trained on {0}, {1}'.format(mva[mva.rfind('gun_') + 4:], det)
+
             # mean vs E
-            title = 'mean_vs_e_{0}_{1}'.format(mva_branch, det)
-            combine(r[0], txts, title,           det, 'E^{gen}', 'Mean_{E^{rec}/E^{gen}}')
-            combine(r[0], txts, title + '_zoom', det, 'E^{gen}', 'Mean_{E^{rec}/E^{gen}}', False, 20)
+            title = 'mean_vs_e_{0}_{1}'.format(mva, det)
+            combine(r[0], txts, title,           cap, 'E^{gen}', 'Mean_{E^{rec}/E^{gen}}')
+            combine(r[0], txts, title + '_zoom', cap, 'E^{gen}', 'Mean_{E^{rec}/E^{gen}}', False, 20)
 
             # sigma vs E
-            title = 'sigma_vs_e_{0}_{1}'.format(mva_branch, det)
-            combineR(r[1], txts, title,           det, 'E^{gen}', '#sigma_{E^{rec}/E^{gen}}/mean')
-            combineR(r[1], txts, title + '_zoom', det, 'E^{gen}', '#sigma_{E^{rec}/E^{gen}}/mean', False, 20)
+            title = 'sigma_vs_e_{0}_{1}'.format(mva, det)
+            combineR(r[1], txts, title,           cap, 'E^{gen}', '#sigma_{E^{rec}/E^{gen}}/mean')
+            combineR(r[1], txts, title + '_zoom', cap, 'E^{gen}', '#sigma_{E^{rec}/E^{gen}}/mean', False, 20)
 
             # mean vs pT
-            title = 'mean_vs_pt_{0}_{1}'.format(mva_branch, det)
-            combine(r[2], txts, title,           det, 'p_{T}^{gen}', 'Mean_{E^{rec}/E^{gen}}')
-            combine(r[2], txts, title + '_zoom', det, 'p_{T}^{gen}', 'Mean_{E^{rec}/E^{gen}}', False, 20)
+            title = 'mean_vs_pt_{0}_{1}'.format(mva, det)
+            combine(r[2], txts, title,           cap, 'p_{T}^{gen}', 'Mean_{E^{rec}/E^{gen}}')
+            combine(r[2], txts, title + '_zoom', cap, 'p_{T}^{gen}', 'Mean_{E^{rec}/E^{gen}}', False, 20)
 
             # sigma vs pT
-            title = 'sigma_vs_pt_{0}_{1}'.format(mva_branch, det)
-            combineR(r[3], txts, title,           det, 'p_{T}^{gen}', '#sigma_{E^{rec}/E^{gen}}/mean')
-            combineR(r[3], txts, title + '_zoom', det, 'p_{T}^{gen}', '#sigma_{E^{rec}/E^{gen}}/mean', False, 20)
+            title = 'sigma_vs_pt_{0}_{1}'.format(mva, det)
+            combineR(r[3], txts, title,           cap, 'p_{T}^{gen}', '#sigma_{E^{rec}/E^{gen}}/mean')
+            combineR(r[3], txts, title + '_zoom', cap, 'p_{T}^{gen}', '#sigma_{E^{rec}/E^{gen}}/mean', False, 20)
 
-            # mean vs eta
-            if det == 'EB': # not necessary to repeat for EE
-                title = 'mean_vs_eta_{0}_pT0-1'.format(mva_branch)
-                combine([x[0] for x in r[4]], txts, title, '0 < p_{T} < 1 GeV/c', '#eta^{gen}', 'Mean_{E^{rec}/E^{gen}}')
+            for (i, (e1, e2)) in enumerate(eregions):
+                # mean vs nVtx (nopu results excluded)
+                try:
+                    title = 'mean_vs_nvtx_{0}_{1}_E{2}-{3}'.format(mva, det, e1, e2)
+                    combine([x[i] for x in r[6]], txts, title, cap, 'nVtx', 'Mean_{E^{rec}/E^{gen}}', True)
+                except:
+                    print('Plot excluded: {0}'.format(title))
 
-                title = 'mean_vs_eta_{0}_pT1-10'.format(mva_branch)
-                combine([x[1] for x in r[4]], txts, title, '1 < p_{T} < 10 GeV/c', '#eta^{gen}', 'Mean_{E^{rec}/E^{gen}}')
+                # sigma vs nVtx
+                try:
+                    title = 'sigma_vs_nvtx_{0}_{1}_E{2}-{3}'.format(mva, det, e1, e2)
+                    combineR([x[i] for x in r[7]], txts, title, cap, 'nVtx', '#sigma_{E^{rec}/E^{gen}}/mean', True)
+                except:
+                    print('Plot excluded: {0}'.format(title))
 
-                title = 'mean_vs_eta_{0}_pT10-100'.format(mva_branch)
-                combine([x[2] for x in r[4]], txts, title, '10 < p_{T} < 100 GeV/c', '#eta^{gen}', 'Mean_{E^{rec}/E^{gen}}')
+                cap = 'trained on {0}, {1} < E^{{gen}} < {2} GeV/c'.format(mva[mva.rfind('gun_') + 4:], e1, e2)
 
-                # sigma vs eta
-                title = 'sigma_vs_eta_{0}_pT0-1'.format(mva_branch)
-                combineR([x[0] for x in r[5]], txts, title, '0 < p_{T} < 1 GeV/c', '#eta^{gen}', '#sigma_{E^{rec}/E^{gen}}/mean')
+                # mean and sigma vs eta
+                if det == 'EB': # not necessary to repeat for EE
+                    title = 'mean_vs_eta_{0}_E{1}-{2}'.format(mva, e1, e2)
+                    combine([x[i] for x in r[4]], txts, title, cap, '#eta^{gen}', 'Mean_{E^{rec}/E^{gen}}')
 
-                title = 'sigma_vs_eta_{0}_pT1-10'.format(mva_branch)
-                combineR([x[1] for x in r[5]], txts, title, '1 < p_{T} < 10 GeV/c', '#eta^{gen}', '#sigma_{E^{rec}/E^{gen}}/mean')
+                    # sigma vs eta
+                    title = 'sigma_vs_eta_{0}_E{1}-{2}'.format(mva, e1, e2)
+                    combineR([x[i] for x in r[5]], txts, title, cap, '#eta^{gen}', '#sigma_{E^{rec}/E^{gen}}/mean')
 
-                title = 'sigma_vs_eta_{0}_pT10-100'.format(mva_branch)
-                combineR([x[2] for x in r[5]], txts, title, '10 < p_{T} < 100 GeV/c', '#eta^{gen}', '#sigma_{E^{rec}/E^{gen}}/mean')
-
-            # mean vs nVtx (nopu results excluded)
-            title = 'mean_vs_nvtx_{0}_{1}_pT0-1'.format(mva_branch, det)
-            combine([x[0] for x in r[6]], txts, title, det, 'nVtx', 'Mean_{E^{rec}/E^{gen}}', True)
-
-            title = 'mean_vs_nvtx_{0}_{1}_pT1-10'.format(mva_branch, det)
-            combine([x[1] for x in r[6]], txts, title, det, 'nVtx', 'Mean_{E^{rec}/E^{gen}}', True)
-
-            title = 'mean_vs_nvtx_{0}_{1}_pT10-100'.format(mva_branch, det)
-            combine([x[2] for x in r[6]], txts, title, det, 'nVtx', 'Mean_{E^{rec}/E^{gen}}', True)
-
-            # sigma vs nVtx
-            title = 'sigma_vs_nvtx_{0}_{1}_pT0-1'.format(mva_branch, det)
-            combineR([x[0] for x in r[7]], txts, title, det, 'nVtx', '#sigma_{E^{rec}/E^{gen}}/mean', True)
-
-            title = 'sigma_vs_nvtx_{0}_{1}_pT1-10'.format(mva_branch, det)
-            combineR([x[1] for x in r[7]], txts, title, det, 'nVtx', '#sigma_{E^{rec}/E^{gen}}/mean', True)
-
-            title = 'sigma_vs_nvtx_{0}_{1}_pT10-100'.format(mva_branch, det)
-            combineR([x[2] for x in r[7]], txts, title, det, 'nVtx', '#sigma_{E^{rec}/E^{gen}}/mean', True)
-
-def make_graphs(infile, det, mva_branch, blockSize):
+def make_graphs(infile, det, mva_branch, eregions, blockSize):
     """Fills, fits and visualizes distributions of Etrue/Erec.
 
     Results are cached into file.
@@ -140,21 +130,21 @@ def make_graphs(infile, det, mva_branch, blockSize):
     grMeanPt = ROOT.grMean.Clone()
     grSigmaPt = ROOT.grSigma.Clone()
 
-    # resolution vs mcEta in pT ranges [0, 1), [1, 10) and [10, 100) GeV
+    # resolution vs mcEta in energy ranges
     grMeanEta = []
     grSigmaEta = []
-    for (pt1, pt2) in [(0, 1), (1, 10), (10, 100)]:
-        title = 'mcEta_{0}_{1}_{2}_pT{3}-{4}'.format(fname, det, mva_branch, pt1, pt2)
-        ROOT.fit_slices(2, blockSize, title, '#eta^{gen}', pt1, pt2)
+    for (e1, e2) in eregions:
+        title = 'mcEta_{0}_{1}_{2}_E{3}-{4}'.format(fname, det, mva_branch, e1, e2)
+        ROOT.fit_slices(2, blockSize, title, '#eta^{gen}', e1, e2)
         grMeanEta.append(ROOT.grMean.Clone())
         grSigmaEta.append(ROOT.grSigma.Clone())
 
-    # resolution vs nVtx in pT ranges [0, 1), [1, 10) and [10, 100) GeV
+    # resolution vs nVtx in energy ranges
     grMeanVtx = []
     grSigmaVtx = []
-    for (pt1, pt2) in [(0, 1), (1, 10), (10, 100)]:
-        title = 'nVtx_{0}_{1}_{2}_pT{3}-{4}'.format(fname, det, mva_branch, pt1, pt2)
-        ROOT.fit_slices(3, blockSize, title, 'nVtx', pt1, pt2)
+    for (e1, e2) in eregions:
+        title = 'nVtx_{0}_{1}_{2}_E{3}-{4}'.format(fname, det, mva_branch, e1, e2)
+        ROOT.fit_slices(3, blockSize, title, 'nVtx', e1, e2)
         grMeanVtx.append(ROOT.grMean.Clone())
         grSigmaVtx.append(ROOT.grSigma.Clone())
 
@@ -204,8 +194,8 @@ def combine(grs, txts, cname, title, xtitle, ytitle, skipNoPU=False, xmax=-1, ym
 
     clrs = [ROOT.kOrange] * ncorr + [8, ROOT.kBlack, ROOT.kBlue, ROOT.kRed]
 
-    for (i, (gr, clr, txt)) in enumerate(zip(grs, clrs, txts)):
-        if skipNoPU and (i in [0, 1] or i in [ncorr, ncorr + 1]):
+    for (gr, clr, txt) in zip(grs, clrs, txts):
+        if skipNoPU and txt.startswith('nopu'):
            continue
 
         gr.SetMarkerStyle(20)
@@ -270,8 +260,8 @@ def combineR(grs, txts, cname, title, xtitle, ytitle, skipNoPU=False, xmax=-1, y
 
     clrs = [ROOT.kOrange] * ncorr + [8, ROOT.kBlack, ROOT.kBlue, ROOT.kRed]
 
-    for (i, (gr, clr, txt)) in enumerate(zip(grs, clrs, txts)):
-        if skipNoPU and (i in [0, 1] or i in [ncorr, ncorr + 1]):
+    for (gr, clr, txt) in zip(grs, clrs, txts):
+        if skipNoPU and txt.startswith('nopu'):
            continue
 
         gr.SetMarkerStyle(20)
@@ -349,8 +339,8 @@ def combineR(grs, txts, cname, title, xtitle, ytitle, skipNoPU=False, xmax=-1, y
     frame.Draw()
 
     # draw corrected/uncorrected ratios
-    for (i, (gr, clr)) in enumerate(zip(rats, clrs[ncorr:])):
-        if skipNoPU and (i in [0, 1] or i in [ncorr, ncorr + 1]):
+    for (gr, clr, txt) in zip(rats, clrs[ncorr:], txts[ncorr:]):
+        if skipNoPU and txt.startswith('nopu'):
            continue
 
         gr.SetMarkerStyle(20)

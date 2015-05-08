@@ -1,8 +1,7 @@
 
 void rootlogon()
 {
-   /* This function must be called by root on start for train_one.cc and
-    * eval_one.cc be compilable.
+   /* This function must be called by root on start for train.cc and eval.cc be compilable.
     */
 
    // keep current working directory clean from .d and .so files
