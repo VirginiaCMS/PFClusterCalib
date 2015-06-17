@@ -26,8 +26,8 @@ def main():
     ROOT.TH1.AddDirectory(False)
 
     # ntuples to process
-    infiles = fnmatch.filter(os.listdir('input'), '*.root')
-    infiles = sorted('input/' + f for f in infiles)
+    infiles = fnmatch.filter(os.listdir('/afs/cern.ch/work/k/konush/public/PFClusterCalib_Apr2015/input'), '*.root')
+    infiles = sorted('/afs/cern.ch/work/k/konush/public/PFClusterCalib_Apr2015/input/' + f for f in infiles)
 
     # text in legends
     txts = [f[f.rfind('gun_') + 4:].replace('.root', '') for f in infiles]
