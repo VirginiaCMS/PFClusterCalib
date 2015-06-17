@@ -22,9 +22,9 @@ def main():
     ROOT.TH1.AddDirectory(False)
 
     # ntuples to process
-    # infiles = fnmatch.filter(os.listdir('input'), '*.root')
-    # infiles = sorted('input/' + f for f in infiles)
-    infiles = ["/afs/cern.ch/work/k/konush/public/PFClusterCalib_Apr2015/input/ntuple_photongun_pu20-50_bx25.root"]
+    infiles = fnmatch.filter(os.listdir('/afs/cern.ch/work/k/konush/public/PFClusterCalib_Apr2015/input'), '*.root')
+    infiles = sorted('/afs/cern.ch/work/k/konush/public/PFClusterCalib_Apr2015/input/' + f for f in infiles)
+    # infiles = ["/afs/cern.ch/work/k/konush/public/PFClusterCalib_Apr2015/input/ntuple_photongun_pu20-50_bx25.root"]
     # make output directories
     for d in ['output', 'output/cache', 'output/plots']:
         if not os.access(d, os.X_OK):
