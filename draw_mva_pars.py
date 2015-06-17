@@ -27,8 +27,8 @@ def main():
     ROOT.gROOT.LoadMacro('draw_mva_pars.cc+')
 
     # ntuples to process
-    infiles = fnmatch.filter(os.listdir('input'), '*.root')
-    infiles = sorted('input/' + f for f in infiles)
+    infiles = fnmatch.filter(os.listdir('/afs/cern.ch/work/k/konush/public/PFClusterCalib_Apr2015/input'), '*.root')
+    infiles = sorted('/afs/cern.ch/work/k/konush/public/PFClusterCalib_Apr2015/input/' + f for f in infiles)
 
     # names of MVAs
     mva_names = [f[f.rfind('/') + 1:].replace('.root', '') for f in infiles]

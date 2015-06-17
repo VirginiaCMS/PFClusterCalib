@@ -26,7 +26,7 @@ python auxiliary/draw_fit_params.py &
 
 wait
 
-ntuples=`ls input/*.root`
+ntuples=`ls /afs/cern.ch/work/k/konush/public/PFClusterCalib_Apr2015/input/*.root`
 
 mkdir -p output
 

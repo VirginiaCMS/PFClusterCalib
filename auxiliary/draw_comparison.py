@@ -31,8 +31,8 @@ def main():
     os.mkdir('plots_comparison')
 
     # ntuples
-    ntuples = fnmatch.filter(os.listdir('input'), '*.root')
-    ntuples = sorted('input/' + f for f in ntuples)
+    ntuples = fnmatch.filter(os.listdir('/afs/cern.ch/work/k/konush/public/PFClusterCalib_Apr2015/input'), '*.root')
+    ntuples = sorted('/afs/cern.ch/work/k/konush/public/PFClusterCalib_Apr2015/input/' + f for f in ntuples)
 
     # MVAs
     mvas = [f[f.rfind('/') + 1:].replace('.root', '') for f in ntuples]
